@@ -1,0 +1,14 @@
+name: Test Website Access
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Fetch test.php
+        run: |
+          echo "Testing website..."
+          curl -L -A "Mozilla/5.0" https://reviewlab.42web.io/test.php

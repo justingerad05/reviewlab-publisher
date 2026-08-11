@@ -484,9 +484,13 @@ body.homepage-bg::before{
   text-decoration: underline;
 }
 
-/* FIXED VERDICT BOX - HIGH CONTRAST */
+/* =========================================================
+   VERDICT BOX - HIGH CONTRAST
+   ========================================================= */
+
 .verdict-box {
-  background: #1e293b; /* Dark Navy/Slate background */
+  background: #1e293b;
+  color: #f8fafc;
   padding: 40px;
   border-radius: 20px;
   text-align: center;
@@ -495,21 +499,51 @@ body.homepage-bg::before{
 }
 
 .verdict-box h2 {
-  color: #f8fafc; /* Near white for the heading */
-  margin-bottom: 15px;
+  color: #f8fafc;
+  margin: 0 0 15px;
   font-size: 2rem;
 }
 
+.verdict-box h3 {
+  color: #f8fafc;
+  margin: 0 0 15px;
+  font-size: 1.15rem;
+}
+
 .verdict-box p {
-  color: #cbd5e1; /* Light gray for the paragraph text */
+  color: #cbd5e1;
   font-size: 1.1rem;
   line-height: 1.6;
   max-width: 800px;
-  margin: 0 auto 25px auto;
+  margin: 0 auto 25px;
+}
+
+.verdict-box ul {
+  color: #e2e8f0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.verdict-box li {
+  color: #e2e8f0;
+  margin: 8px 0;
+  line-height: 1.6;
 }
 
 .verdict-box strong {
-  color: #38bdf8; /* Highlight the winner in a bright sky blue */
+  color: #38bdf8;
+}
+
+.verdict-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 30px;
+  margin-top: 25px;
+}
+
+.verdict-columns > div {
+  color: #e2e8f0;
 }
 
 .verdict-btns {
@@ -520,14 +554,81 @@ body.homepage-bg::before{
 }
 
 /* MOBILE ADJUSTMENTS */
+
 @media (max-width: 600px) {
+  .verdict-columns {
+    grid-template-columns: 1fr;
+    gap: 25px;
+  }
+
   .verdict-btns {
     flex-direction: column;
   }
-  
+
   .verdict-box {
     padding: 25px 15px;
   }
+}
+
+/* =========================================================
+   REVIEW RADAR / PERFORMANCE PROFILE
+   ========================================================= */
+
+.review-radar {
+  background: #1e293b;
+  color: #f8fafc;
+  padding: 30px;
+  border-radius: 20px;
+  margin: 40px 0;
+  border: 1px solid #334155;
+  text-align: center;
+}
+
+.review-radar h2 {
+  color: #f8fafc;
+  margin: 0 0 20px;
+  font-size: 1.75rem;
+}
+
+.review-radar svg {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  height: auto;
+  margin: 0 auto;
+  overflow: visible;
+}
+
+.review-radar svg text {
+  fill: #f8fafc;
+  color: #f8fafc;
+  font-family: inherit;
+  font-weight: 600;
+}
+
+.review-radar svg line {
+  stroke: #64748b;
+}
+
+.review-radar svg polygon {
+  fill: rgba(37, 99, 235, 0.18);
+  stroke: #60a5fa;
+  stroke-width: 2;
+}
+
+@media (max-width: 600px) {
+  .review-radar {
+    padding: 20px 12px;
+  }
+
+  .review-radar h2 {
+    font-size: 1.4rem;
+  }
+
+  .review-radar svg {
+    max-width: 340px;
+  }
+}
   
   .comparison-page h1 {
     font-size: 28px;
@@ -1138,21 +1239,15 @@ color:white;
 }
 
 .footer-links{
-  display:flex;
-  flex-direction:row;
-  flex-wrap:wrap;
-  align-items:center;
-  justify-content:flex-start;
-  gap:10px 18px;
-  width:100%;
-  margin:0 0 12px;
-  text-align:left;
+display:flex;
+flex-wrap:wrap;
+justify-content:center;
+gap:18px;
+margin-bottom:12px;
 }
 
 .footer-links a{
-  display:inline-block;
-  margin:0;
-  white-space:nowrap;
+margin:0;
 }
 
 .footer-links a:hover{
@@ -1160,10 +1255,8 @@ text-decoration:underline;
 }
 
 .footer-copy{
-  width:100%;
-  margin:15px 0 0;
-  text-align:left;
-  color:#6b7280;
+margin-top:15px;
+color:#6b7280;
 }
 
 .floating-icon{

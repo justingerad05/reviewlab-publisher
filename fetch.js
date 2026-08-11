@@ -434,7 +434,6 @@ function generateTestingMethodology(post){
 /* =========================================================
    VERDICT ENGINE
    ========================================================= */
-
 function generateVerdictBox(post){
   if(!post.isReview) return "";
 

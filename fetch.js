@@ -221,7 +221,8 @@ function buildReviewScore({
   product,
   pros,
   cons,
-  isReview
+  isReview,
+  reviewData = {}
 }){
   if(!isReview){
     return {
@@ -242,74 +243,47 @@ function buildReviewScore({
   ];
 
   const reviewScore = {};
+  const scoreSource = {};
+  const configuredScores = reviewData?.scores || {};
+  const productScores = product?.reviewScore || {};
 
   categories.forEach(([key,label])=>{
     const extracted = extractScoreFromContent(html,label);
 
-    /*
-      Only use a score explicitly present in the review.
-      If the review does not contain one, calculate a neutral
-      evidence-based value instead of inventing a product fact.
-    */
     if(extracted !== null){
       reviewScore[key] = extracted;
+      scoreSource[key] = "review-content";
       return;
     }
 
-    let value = 5;
-
-    const productText = cleanText(
-      `${product?.name || ""} ${product?.features?.join(" ") || ""} ${html}`
-    ).toLowerCase();
-
-    if(
-      key === "features" &&
-      safeArray(product?.features).length >= 3
-    ){
-      value = 7;
+    const configured = Number(configuredScores[key]);
+    if(Number.isFinite(configured) && configured >= 0 && configured <= 10){
+      reviewScore[key] = configured;
+      scoreSource[key] = "reviews.json";
+      return;
     }
 
-    if(
-      key === "easeOfUse" &&
-      /(easy|simple|beginner|intuitive|easy to use)/i.test(productText)
-    ){
-      value = 7;
+    const productValue = Number(productScores[key]);
+    if(Number.isFinite(productValue) && productValue >= 0 && productValue <= 10){
+      reviewScore[key] = productValue;
+      scoreSource[key] = "products.json";
+      return;
     }
-
-    if(
-      key === "automation" &&
-      /(automation|workflow|automate|agent)/i.test(productText)
-    ){
-      value = 7;
-    }
-
-    if(
-      key === "accuracy" &&
-      /(accurate|accuracy|quality|precise|natural)/i.test(productText)
-    ){
-      value = 7;
-    }
-
-    if(
-      key === "support" &&
-      /(support|customer service|help center)/i.test(productText)
-    ){
-      value = 6;
-    }
-
-    reviewScore[key] = value;
   });
 
-  const values = Object.values(reviewScore);
+  const values = Object.values(reviewScore).filter(Number.isFinite);
 
   const finalScore = values.length
     ? values.reduce((a,b)=>a+b,0) / values.length
     : 0;
 
-  const score100 = Math.round(finalScore * 10);
+  const score100 = values.length
+    ? Math.round(finalScore * 10)
+    : 0;
+
   return {
     score: score100,
-    ratingValue: (score100 / 20).toFixed(1),
+    ratingValue: values.length ? (score100 / 20).toFixed(1) : "0.0",
     reviewScore,
     breakdown: {
       features: reviewScore.features,
@@ -318,6 +292,9 @@ function buildReviewScore({
       support: reviewScore.support,
       automation: reviewScore.automation,
       accuracy: reviewScore.accuracy,
+      dimensionsScored: values.length,
+      dimensionsTotal: categories.length,
+      scoreSource,
       prosCount: pros.length,
       consCount: cons.length
     }
@@ -434,6 +411,7 @@ function generateTestingMethodology(post){
 /* =========================================================
    VERDICT ENGINE
    ========================================================= */
+
 function generateVerdictBox(post){
   if(!post.isReview) return "";
 
@@ -441,10 +419,7 @@ function generateVerdictBox(post){
 
   const bestFor = safeArray(product.bestFor);
 
-  const avoid =
-    safeArray(product.avoidFor).length
-      ? product.avoidFor
-      : ["Users with requirements outside this tool's core workflow"];
+  const avoid = safeArray(product.avoidFor);
 
   return `
   <section class="verdict-box review-verdict-box">
@@ -458,7 +433,7 @@ function generateVerdictBox(post){
           ${
             bestFor.length
               ? bestFor.map(x=>`<li>✔ ${escapeHtml(x)}</li>`).join("")
-              : `<li>✔ Users who need ${escapeHtml(product.category || "this type of AI tool")}</li>`
+              : `<li>✔ See the verified audience profile below.</li>`
           }
         </ul>
       </div>
@@ -466,7 +441,7 @@ function generateVerdictBox(post){
       <div>
         <h3>Who should avoid it?</h3>
         <ul>
-          ${avoid.map(x=>`<li>✘ ${escapeHtml(x)}</li>`).join("")}
+          ${avoid.length ? avoid.map(x=>`<li>✘ ${escapeHtml(x)}</li>`).join("") : `<li>✘ No verified avoid profile supplied yet.</li>`}
         </ul>
       </div>
 
@@ -482,47 +457,23 @@ function generateVerdictBox(post){
 function calculateProductSimilarity(a,b){
   if(!a || !b) return 0;
 
+  const set = value => new Set(safeArray(value).map(normalizeText).filter(Boolean));
+  const overlap = (x,y) => {
+    const aSet=set(x), bSet=set(y);
+    if(!aSet.size || !bSet.size) return 0;
+    let hits=0;
+    bSet.forEach(v=>{ if(aSet.has(v)) hits++; });
+    return Math.min(1,hits/Math.max(1,Math.min(aSet.size,bSet.size)));
+  };
+
   let score = 0;
-
-  if(a.category && b.category && a.category === b.category){
-    score += 30;
-  }
-
-  const aKeywords = new Set([
-    ...safeArray(a.keywords).map(normalizeText),
-    ...safeArray(a.features).map(normalizeText),
-    ...safeArray(a.bestFor).map(normalizeText)
-  ]);
-
-  const bKeywords = [
-    ...safeArray(b.keywords),
-    ...safeArray(b.features),
-    ...safeArray(b.bestFor)
-  ].map(normalizeText);
-
-  bKeywords.forEach(keyword=>{
-    if(keyword && aKeywords.has(keyword)){
-      score += 5;
-    }
-  });
-
-  if(a.pricingModel && b.pricingModel &&
-     a.pricingModel === b.pricingModel){
-    score += 15;
-  }
-
-  if(a.price && b.price){
-    const priceA = parseFloat(String(a.price).replace(/[^0-9.]/g,""));
-    const priceB = parseFloat(String(b.price).replace(/[^0-9.]/g,""));
-
-    if(Number.isFinite(priceA) && Number.isFinite(priceB)){
-      const difference = Math.abs(priceA-priceB);
-
-      if(difference <= Math.max(priceA,priceB) * 0.25){
-        score += 10;
-      }
-    }
-  }
+  if(a.category && b.category && a.category === b.category) score += 30;
+  score += Math.round(overlap(a.keywords,b.keywords) * 20);
+  score += Math.round(overlap(a.bestFor,b.bestFor) * 10);
+  score += Math.round(overlap(a.useCases,b.useCases) * 15);
+  score += Math.round(overlap(a.audience,b.audience) * 10);
+  score += Math.round(overlap(a.features,b.features) * 10);
+  if(a.pricingModel && b.pricingModel && a.pricingModel === b.pricingModel) score += 5;
 
   return Math.min(100,score);
 }
@@ -531,54 +482,48 @@ function generateAutomaticAlternatives(post, allPosts){
   if(!post.isReview) return "";
 
   const candidates = allPosts
-    .filter(p =>
-      p.slug !== post.slug &&
-      p.isReview &&
-      p.product
-    )
+    .filter(p => p.slug !== post.slug && p.isReview && p.product)
     .map(p=>({
       post:p,
-      similarity:calculateProductSimilarity(
-        post.product,
-        p.product
-      )
-    }))
-    .sort((a,b)=>b.similarity-a.similarity);
+      similarity:calculateProductSimilarity(post.product,p.product)
+    }));
 
-  const top = candidates.slice(0,6);
+  if(!candidates.length) return "";
 
-  if(!top.length) return "";
+  const priceOf = item => {
+    const n = parseFloat(String(item.post.product?.price || "").replace(/[^0-9.]/g,""));
+    return Number.isFinite(n) ? n : Infinity;
+  };
+
+  const scoreOf = item => Number(item.post.score?.score || 0);
+  const easeOf = item => Number(item.post.reviewScore?.easeOfUse || 0);
+  const featureOf = item => Number(item.post.reviewScore?.features || 0);
+  const premiumOf = item => Number(item.post.product?.price || "").replace(/[^0-9.]/g,"") || 0;
 
   const roles = [
-    "Best Alternative",
-    "Cheapest Alternative",
-    "Best Beginner Tool",
-    "Fastest Tool",
-    "Best Value",
-    "Best Premium"
+    ["Best Alternative", arr => [...arr].sort((a,b)=>b.similarity-a.similarity)[0]],
+    ["Cheapest Alternative", arr => [...arr].sort((a,b)=>priceOf(a)-priceOf(b))[0]],
+    ["Best Beginner Tool", arr => [...arr].sort((a,b)=>(easeOf(b)+scoreOf(b))-(easeOf(a)+scoreOf(a)))[0]],
+    ["Fastest Tool", arr => [...arr].sort((a,b)=>easeOf(b)-easeOf(a))[0]],
+    ["Best Value", arr => [...arr].sort((a,b)=>scoreOf(b)-scoreOf(a))[0]],
+    ["Best Premium", arr => [...arr].sort((a,b)=>premiumOf(b)-premiumOf(a))[0]]
   ];
 
   return `
   <section class="automatic-alternatives">
     <h2>Best Alternatives</h2>
-
     <div class="alternative-grid">
-      ${roles.map((role,index)=>{
-        const item = top[index] || top[0];
-
+      ${roles.map(([role,pick])=>{
+        const item = pick(candidates) || candidates[0];
         return `
         <div class="alternative-card">
           <strong>${role}</strong>
-          <a href="${item.post.url}">
-            ${escapeHtml(item.post.title)}
-          </a>
-          <span>${item.similarity}% relevance</span>
-        </div>
-        `;
+          <a href="${item.post.url}">${escapeHtml(item.post.title)}</a>
+          <span>${item.similarity}% similarity</span>
+        </div>`;
       }).join("")}
     </div>
-  </section>
-  `;
+  </section>`;
 }
 
 /* =========================================================
@@ -676,7 +621,13 @@ function generateReviewHistory(post){
 
   const history = getVersionHistory(post.product?.slug);
 
-  if(!history.length) return "";
+  if(!history.length){
+    return `
+    <section class="review-history">
+      <h2>Review History</h2>
+      <p>No verified change-log entries have been recorded for this product yet.</p>
+    </section>`;
+  }
 
   return `
   <section class="review-history">
@@ -700,6 +651,113 @@ function generateReviewHistory(post){
       </div>
     `).join("")}
   </section>
+  `;
+}
+
+/* =========================================================
+             SIDEBAR RELATED GUIDE
+   ========================================================= */
+function generateRotatingRelatedGuides(currentPost, allPosts) {
+
+  const currentUrl = currentPost?.url || "";
+
+  const candidates = safeArray(allPosts)
+    .filter(p => p.url && p.url !== currentUrl)
+    .filter(p => !p.isReview);
+
+  if (!candidates.length) {
+    return `
+      <div class="sidebar-card">
+        <h3>📚 Related Guides</h3>
+        <p>No supporting guides available yet.</p>
+      </div>
+    `;
+  }
+
+  const currentCategory =
+    String(currentPost?.category || "").toLowerCase();
+
+  const currentKeywords = [
+    ...safeArray(currentPost?.product?.keywords),
+    ...safeArray(currentPost?.tags),
+    currentCategory
+  ]
+    .map(x => String(x).toLowerCase())
+    .filter(Boolean);
+
+  function relevanceScore(post) {
+
+    const text = [
+      post.title,
+      post.description,
+      post.category,
+      ...safeArray(post.tags),
+      ...safeArray(post.product?.keywords)
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    let score = 0;
+
+    currentKeywords.forEach(keyword => {
+      if (keyword && text.includes(keyword)) {
+        score += 3;
+      }
+    });
+
+    if (
+      String(post.category || "").toLowerCase() ===
+      currentCategory
+    ) {
+      score += 8;
+    }
+
+    return score;
+  }
+
+  const ranked = candidates
+    .map(post => ({
+      post,
+      score: relevanceScore(post)
+    }))
+    .sort((a,b) => b.score - a.score);
+
+  /*
+     Rotation:
+     Each build starts from a different point in the
+     supporting-post pool instead of always showing
+     the exact same three articles.
+  */
+
+  const rotation =
+    Math.floor(Date.now() / (1000 * 60 * 60 * 24)) %
+    Math.max(ranked.length, 1);
+
+  const rotated = [
+    ...ranked.slice(rotation),
+    ...ranked.slice(0, rotation)
+  ];
+
+  const selected = rotated
+    .slice(0, 3)
+    .map(x => x.post);
+
+  return `
+    <div class="sidebar-card related-guides-widget">
+
+      <h3>📚 Related Guides</h3>
+
+      <ul>
+        ${selected.map(post => `
+          <li>
+            <a href="${post.url}">
+              ${escapeHtml(post.title)}
+            </a>
+          </li>
+        `).join("")}
+      </ul>
+
+    </div>
   `;
 }
 
@@ -795,12 +853,12 @@ function generateRadarChart(post){
   const values = post.score?.reviewScore || {};
 
   const axes = [
-    ["Speed",values.easeOfUse || 5],
-    ["Accuracy",values.accuracy || 5],
-    ["Automation",values.automation || 5],
-    ["Templates",values.features || 5],
-    ["Support",values.support || 5],
-    ["Pricing",values.pricing || 5]
+    ["Speed",Number.isFinite(Number(values.easeOfUse)) ? Number(values.easeOfUse) : 0],
+    ["Accuracy",Number.isFinite(Number(values.accuracy)) ? Number(values.accuracy) : 0],
+    ["Automation",Number.isFinite(Number(values.automation)) ? Number(values.automation) : 0],
+    ["Templates",Number.isFinite(Number(values.features)) ? Number(values.features) : 0],
+    ["Support",Number.isFinite(Number(values.support)) ? Number(values.support) : 0],
+    ["Pricing",Number.isFinite(Number(values.pricing)) ? Number(values.pricing) : 0]
   ];
 
   const cx = 150;
@@ -1122,7 +1180,8 @@ function calculateReviewScore({
   productMatch,
   isReview,
   pros,
-  cons
+  cons,
+  reviewData = {}
 }){
 
   return buildReviewScore({
@@ -1130,7 +1189,8 @@ function calculateReviewScore({
     product: productMatch,
     pros,
     cons,
-    isReview
+    isReview,
+    reviewData
   });
 }
 
@@ -1205,7 +1265,12 @@ function getProductData(title, content = "") {
 
     platforms: safeArray(product.platforms),
 
-    performance: product.performance || {}
+    performance: product.performance || {},
+    reviewScore: product.reviewScore || {},
+    avoidFor: safeArray(product.avoidFor),
+    audience: safeArray(product.audience),
+    useCases: safeArray(product.useCases),
+    strengths: safeArray(product.strengths)
   };
 }
 
@@ -1321,7 +1386,6 @@ const primaryOG = ogImages[0];
 const readTime = Math.max(1,
 Math.ceil(textOnly.split(/\s+/).length / 200)
 );
-
 /* SCHEMA */
 const wordCount = textOnly.split(/\s+/).length;
 const productMatch = getProductData(title, rawHtml);
@@ -1379,12 +1443,17 @@ if (hasReviewLabel) {
     lowerTitle.includes("verdict") ||
     lowerTitle.includes("rating");
 }
+const postType = isReview ? "review" : "supporting";
+
+const reviewData = getReviewData(productInfo.slug);
+
 const reviewScore = calculateReviewScore({
   html: rawHtml,
   pros,
   cons,
   productMatch,
-  isReview
+  isReview,
+  reviewData
 });
 const ratingValue = reviewScore.ratingValue;
 
@@ -1395,6 +1464,15 @@ productInfo.brand ||
 ? title.split(" ")[0]
 : title);
 
+const reviewRatingSchema = reviewScore.score > 0
+  ? {
+      "@type":"Rating",
+      "ratingValue":reviewScore.ratingValue,
+      "bestRating":"5",
+      "worstRating":"1"
+    }
+  : null;
+
 const productSchema = {
   "@context":"https://schema.org",
   "@type":"Product",
@@ -1402,36 +1480,26 @@ const productSchema = {
   "image":primaryOG,
   "category": productInfo.category || "",
   "offers":{
-"@type":"Offer",
-"url": productInfo.website || url || "",
-"price": productInfo.price || "",
-"priceCurrency":"USD",
-"availability":"https://schema.org/InStock"
-},
-  // ...and we USE brandName here instead of title.split(" ")[0]
+    "@type":"Offer",
+    "url": productInfo.website || url || "",
+    "price": productInfo.price || "",
+    "priceCurrency":"USD",
+    "availability":"https://schema.org/InStock"
+  },
   "brand":{
-"@type":"Brand",
-"name":productInfo.brand || brandName
-},
-"aggregateRating":{
- "@type":"AggregateRating",
- "ratingValue":ratingValue,
- "reviewCount": Math.max(12, Math.floor(wordCount / 150))
-},
-"review":{
- "@type":"Review",
- "author":{"@type":"Person","name":"Justin Gerald"},
- "reviewBody": description,
- "positiveNotes": pros,
- "negativeNotes": cons,
- "reviewRating":{
-   "@type":"Rating",
-   "ratingValue":ratingValue,
-   "bestRating":"5"
- }
-}
+    "@type":"Brand",
+    "name":productInfo.brand || brandName
+  },
+  "review":{
+    "@type":"Review",
+    "author":{"@type":"Person","name":"Justin Gerald"},
+    "reviewBody": description,
+    "positiveNotes": pros,
+    "negativeNotes": cons,
+    ...(reviewRatingSchema ? {"reviewRating":reviewRatingSchema} : {})
+  }
 };
-  
+
 const articleSchema = {
 "@context":"https://schema.org",
 "@type":"Review",
@@ -2530,15 +2598,7 @@ ${related}
 </p>
 </div>
 
-<!-- 5. INTERNAL LINKS -->
-<div class="sidebar-card">
-  <h3>📚 Related Guides</h3>
-  <ul>
-    <li><a href="/ai-tools/">Best AI Tools for Beginners</a></li>
-    <li><a href="/posts/">How I Made My First $100 Online</a></li>
-    <li><a href="/ai-tools/automation-tools/">Top Passive Income Systems</a></li>
-  </ul>
-</div>
+${generateRotatingRelatedGuides(post, posts)}
 
 <!-- DYNAMIC RECOMMENDATION WIDGETS -->
 
@@ -2837,18 +2897,24 @@ for (const topic in topics) {
           </thead>
 
           <tbody>
-            <tr>
-              <td>Overall Score</td>
-              ${comparisonCandidates.map(p=>
-                `<td>${p.score?.score || 0}/100</td>`
-              ).join("")}
-            </tr>
-
-            <tr>
-              <td>Category</td>
-              ${comparisonCandidates.map(p=>
-                `<td>${escapeHtml(topicTitle)}</td>`
-              ).join("")}
+            ${[
+              ["Speed","easeOfUse"],
+              ["AI Quality","accuracy"],
+              ["Templates","features"],
+              ["Automation","automation"],
+              ["Support","support"],
+              ["Pricing","pricing"]
+            ].map(([label,key])=>`
+              <tr>
+                <td>${label}</td>
+                ${comparisonCandidates.map(p=>{
+                  const value = Number(p.reviewScore?.[key] || 0);
+                  return `<td>${value ? `${"★".repeat(Math.round(value))}${"☆".repeat(Math.max(0,10-Math.round(value)))}` : "Not scored"}</td>`;
+                }).join("")}
+              </tr>`).join("")}
+            <tr class="comparison-score-row">
+              <td><strong>Overall Score</strong></td>
+              ${comparisonCandidates.map(p=>`<td><strong>${p.score?.score ? `${p.score.score}/100` : "Pending"}</strong></td>`).join("")}
             </tr>
           </tbody>
         </table>
@@ -3264,6 +3330,8 @@ const searchIndex = posts.map(p=>({
   bestFor: safeArray(p.product?.bestFor),
   features: safeArray(p.product?.features),
   entities: safeArray(p.entities),
+  audience: safeArray(p.product?.audience),
+  useCases: safeArray(p.product?.useCases),
   score: p.score?.score || 0,
   isReview: !!p.isReview
 }));
@@ -3280,6 +3348,12 @@ fs.copyFileSync("assets/styles.css","_site/assets/styles.css");
 fs.copyFileSync("assets/og-default.jpg","_site/assets/og-default.jpg");
 fs.copyFileSync("assets/og-cta-tested.jpg","_site/assets/og-cta-tested.jpg");
 fs.copyFileSync("assets/email.js","_site/assets/email.js");
+
+/* Copy authority data into the generated build */
+for(const dataFile of ["site.json","products.json","entities.json","comparisons.json","authors.json","faq.json","reviews.json","glossary.json","versions.json"]){
+  const source = dataFile === "site.json" ? `_data/${dataFile}` : `_data/${dataFile}`;
+  if(fs.existsSync(source)) fs.copyFileSync(source, `_site/_data/${dataFile}`);
+}
 
 /* =========================
    HOMEPAGE + PAGINATION
@@ -3385,6 +3459,21 @@ and real-world monetization potential — not marketing claims.
   <div>✔ No Anonymous Authors</div>
   <div>✔ ROI-Focused Reviews</div>
 </div>
+<section class="homepage-authority-grid">
+  ${(() => {
+    const reviewPosts = posts.filter(p=>p.isReview);
+    const latest = [...reviewPosts].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,4);
+    const topRated = [...reviewPosts].filter(p=>p.score?.score).sort((a,b)=>b.score.score-a.score.score).slice(0,4);
+    const editor = rankedRecommendations[0]?.post;
+    const updated = [...reviewPosts].sort((a,b)=>new Date(b.product?.lastUpdated || b.date)-new Date(a.product?.lastUpdated || a.date)).slice(0,4);
+    const compared = [...reviewPosts].sort((a,b)=>((generatedComparisons.get(b.slug)||[]).length)-((generatedComparisons.get(a.slug)||[]).length)).slice(0,4);
+    const render = (title,items) => `<section class="homepage-authority-section"><h2>${title}</h2><ul>${items.map(p=>`<li><a href="${p.url}">${escapeHtml(p.title)}</a></li>`).join("")}</ul></section>`;
+    return render("Latest Reviews",latest) + render("Top Rated",topRated) + (editor ? `<section class="homepage-authority-section featured"><h2>Editor's Choice</h2><a href="${editor.url}">${escapeHtml(editor.title)}</a><strong>${editor.score?.score ? `${editor.score.score}/100` : "Pending"}</strong></section>` : "") + render("Recently Updated",updated) + render("Most Compared",compared) + `<section class="homepage-authority-section"><h2>Popular Categories</h2><ul>${Object.keys(topics).map(cat=>`<li><a href="${SITE_URL}/ai-tools/${cat}/">${escapeHtml(formatCategoryTitle(cat))}</a></li>`).join("")}</ul></section>`;
+  })()}
+</section>
+
+${generateSiteTrustSignals()}
+
 <section class="email-capture">
 <h3>Get AI Tools Worth Using</h3>
 <p>Only performance-tested software with real implementation value.
@@ -3501,7 +3590,9 @@ posts
     ...safeArray(p.cons),
     ...safeArray(p.bestFor),
     ...safeArray(p.features),
-    ...safeArray(p.entities)
+    ...safeArray(p.entities),
+    ...safeArray(p.audience),
+    ...safeArray(p.useCases)
   ]
   .join(" ")
   .toLowerCase();

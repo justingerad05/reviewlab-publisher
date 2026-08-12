@@ -1,3 +1,131 @@
+/* ReviewLab Authority Upgrade — APPEND AFTER existing styles.css */
+
+.homepage-authority-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:24px;
+  margin:35px 0 50px;
+}
+.homepage-authority-section{
+  background:rgba(15,23,42,.55);
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:18px;
+  padding:22px;
+  backdrop-filter:blur(14px);
+}
+.homepage-authority-section h2{
+  margin-top:0;
+  color:#fff;
+}
+.homepage-authority-section ul{margin:0;padding-left:20px;}
+.homepage-authority-section li{margin:9px 0;}
+.homepage-authority-section.featured{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  justify-content:center;
+}
+.homepage-authority-section.featured strong{font-size:22px;color:#38bdf8;}
+
+.review-timeline,
+.testing-methodology,
+.automatic-alternatives,
+.review-history,
+.site-trust-signals{
+  margin:40px 0;
+  padding:28px;
+  border-radius:18px;
+  border:1px solid #dbe3ec;
+  background:#f8fafc;
+  color:#1f2937;
+}
+.review-timeline h2,
+.testing-methodology h2,
+.automatic-alternatives h2,
+.review-history h2{margin-top:0;color:#111827;}
+.timeline-grid{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:14px;
+}
+.timeline-grid > div{
+  padding:15px;
+  background:#fff;
+  border:1px solid #e5e7eb;
+  border-radius:12px;
+}
+.timeline-grid strong,.timeline-grid span{display:block;}
+.timeline-grid strong{font-size:13px;color:#64748b;margin-bottom:7px;}
+.timeline-grid span{font-weight:700;color:#111827;}
+.testing-methodology ul{columns:2;margin:0;padding-left:20px;}
+.testing-methodology li{margin:8px 0;}
+
+.alternative-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:16px;
+}
+.alternative-card{
+  background:#fff;
+  border:1px solid #e5e7eb;
+  border-radius:14px;
+  padding:18px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.alternative-card strong{color:#475569;font-size:13px;}
+.alternative-card a{font-weight:700;color:#2563eb;}
+.alternative-card span{font-size:12px;color:#64748b;}
+
+.score-evidence{
+  display:block;
+  margin-top:8px;
+  font-size:13px;
+  color:#64748b;
+  font-weight:500;
+}
+
+.site-trust-signals{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  gap:12px;
+  background:transparent;
+  border:0;
+  padding:20px 0;
+  color:#64748b;
+}
+.site-trust-signals div{
+  padding:9px 13px;
+  border:1px solid #e2e8f0;
+  border-radius:999px;
+  background:#fff;
+  font-size:13px;
+}
+
+.review-history .history-item{
+  margin-bottom:16px;
+  padding:16px;
+  background:#fff;
+  border:1px solid #e5e7eb;
+  border-radius:12px;
+}
+.review-history .history-item strong,
+.review-history .history-item span{display:block;}
+.review-history .history-item span{font-size:13px;color:#64748b;margin-top:4px;}
+
+@media(max-width:900px){
+  .homepage-authority-grid{grid-template-columns:1fr;}
+  .timeline-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .alternative-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .testing-methodology ul{columns:1;}
+}
+@media(max-width:600px){
+  .timeline-grid,.alternative-grid{grid-template-columns:1fr;}
+  .review-timeline,.testing-methodology,.automatic-alternatives,.review-history{padding:20px 14px;}
+}
+
 /* ===== Basic Background Test ===== */
 body.homepage-bg{
   background-image:url("/assets/hero-bg.webp");
